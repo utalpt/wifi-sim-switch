@@ -1,5 +1,11 @@
 # WiFi SIM Switch
 
+![WiFi SIM Switch](docs/hero.png)
+
+[![Release](https://img.shields.io/github/v/release/utalpt/wifi-sim-switch?color=e8ff47&labelColor=13121c)](https://github.com/utalpt/wifi-sim-switch/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/utalpt/wifi-sim-switch/total?color=47c8ff&labelColor=13121c)](https://github.com/utalpt/wifi-sim-switch/releases)
+[![License](https://img.shields.io/github/license/utalpt/wifi-sim-switch?color=b47cff&labelColor=13121c)](LICENSE)
+
 KernelSU module that gives your two SIMs one setup while you're on WiFi and another when you're not. Everything is configured from the module's **WebUI** in the KernelSU manager.
 
 Built and tested on the Xiaomi 17 Ultra (nezha) running xiaomi.eu HyperOS 3, with KernelSU Next.
@@ -7,6 +13,8 @@ Built and tested on the Xiaomi 17 Ultra (nezha) running xiaomi.eu HyperOS 3, wit
 **Root solutions:**
 - **KernelSU / KernelSU Next / APatch:** everything works, including the WebUI and the card banner.
 - **Magisk:** the module, the status on the card and the Action button (Magisk v28+) work, but this hasn't been tested on Magisk yet. Magisk has no WebUI of its own, so use **WebUI X** or **MMRL** to open the settings. The banner isn't shown.
+
+![WebUI: status, Off WiFi profile and Advanced](docs/screens.png)
 
 ## Install
 
@@ -77,6 +85,8 @@ The card refreshes when you reopen the module list.
 - **Advanced:** check interval, debounce, ISub transaction codes, and build confirmation.
 - **Theme:** Default, Minimal, Acid, Synthwave, Toxic or Ultraviolet. Default and Minimal follow the system light/dark setting. The four neon themes use a terminal look with glow and load IBM Plex from Google Fonts, falling back to the system monospace font when offline. The choice is saved in `/data/adb/wifisimoff/theme`.
 - **Log:** the last 80 lines.
+
+![The six themes](docs/themes.png)
 
 ## ROM-specific: ISub transaction codes
 
