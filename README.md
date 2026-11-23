@@ -14,8 +14,6 @@ Built and tested on the Xiaomi 17 Ultra (nezha) running xiaomi.eu HyperOS 3, wit
 - **KernelSU / KernelSU Next / APatch:** everything works, including the WebUI and the card banner.
 - **Magisk:** the module, the status on the card and the Action button (Magisk v28+) work, but this hasn't been tested on Magisk yet. Magisk has no WebUI of its own, so use **WebUI X** or **MMRL** to open the settings. The banner isn't shown.
 
-<p align="center"><img src="docs/overview.png" width="540" alt="Features at a glance"></p>
-
 ## Install
 
 1. Download `wifisimoff-vX.Y.zip` from [Releases](https://github.com/utalpt/wifi-sim-switch/releases). GitHub's green "Code > Download ZIP" button won't install, because it puts everything inside a folder.
