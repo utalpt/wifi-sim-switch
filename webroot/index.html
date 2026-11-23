@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WiFi SIM Switch</title>
+<script>try { var t = localStorage.getItem('wss_theme'); if (t) { document.documentElement.dataset.theme = t;
+  if (['acid','synthwave','toxic','ultraviolet'].indexOf(t) >= 0) document.documentElement.classList.add('neon'); } } catch (e) {}</script>
+<style>
+  :root {
+    --bg: #eef2f8; --bg2: #e3e9f3; --surface: #ffffff; --raise: #f4f7fb;
+    --text: #13203a; --muted: #5d6c86; --faint: #c9d3e3; --line: #dde4ef;
+    --wifi: #0a8fc2; --wifi-soft: #dff2fa; --cell: #c47b0a; --cell-soft: #fbefd9;
+    --ok: #13854a; --ok-soft: #dcf3e6; --bad: #c4372f; --bad-soft: #fbe3e1; --warn: #9a6400; --warn-soft: #fbf0d4;
+    --chip: #d4b26a; --chip-line: #b8954d; --card-sim: linear-gradient(150deg, #ffffff, #e8eef8);
+    --accent: var(--wifi); --accent-soft: var(--wifi-soft);
+    --r-lg: 22px; --r-md: 14px; --r-sm: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1626; --bg2: #121e33; --surface: #15223a; --raise: #1b2a45;
+      --text: #e7eef9; --muted: #8fa2c0; --faint: #34476a; --line: #24365a;
+      --wifi: #3fc3f2; --wifi-soft: #12324a; --cell: #f2ae45; --cell-soft: #3a2c13;
+      --ok: #4cd38a; --ok-soft: #133826; --bad: #ff7a70; --bad-soft: #3d1a1a; --warn: #f0c060; --warn-soft: #3a2e12;
+      --chip: #cfae62; --chip-line: #a88a45; --card-sim: linear-gradient(150deg, #20314f, #172640);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  /* Background effects live on one fixed layer composited by the GPU, instead of a
+     fixed body background that repaints the whole page while scrolling */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; transform: translateZ(0);
+    background: radial-gradient(120% 60% at 50% -10%, var(--bg2), var(--bg) 60%); }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 system-ui, "MiSans", Roboto, "Segoe UI", sans-serif;
+    font-feature-settings: "tnum" 1;
+    padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 100px);
+    max-width: 620px; margin: 0 auto;
+  }
+  button, select, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  svg { display: block; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 26px; line-height: 1.1; margin: 0; letter-spacing: -.02em; font-weight: 750; }
+  .byline { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .byline b { color: var(--text); font-weight: 600; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.idle { background: var(--raise); color: var(--muted); }
+
+  /* ---------- SIM cards (the hero) ---------- */
+  .simdeck { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .simwrap { padding: 1px; border-radius: 17px; background: var(--line); min-width: 0;
+    clip-path: polygon(0 0, calc(100% - 30px) 0, 100% 30px, 100% 100%, 0 100%); transition: filter .35s, opacity .35s; }
+  .simcard {
+    aspect-ratio: 1.42; border-radius: 16px; padding: 14px 14px 12px; background: var(--card-sim);
+    clip-path: polygon(0 0, calc(100% - 29.6px) 0, 100% 29.6px, 100% 100%, 0 100%);
+    display: flex; flex-direction: column; justify-content: space-between; min-width: 0;
+  }
+  .simwrap.off { filter: grayscale(1); opacity: .5; }
+  .simwrap.off .chip { background: var(--faint); border-color: var(--faint); }
+  .simtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .chip {
+    width: 34px; height: 26px; border-radius: 6px; background: var(--chip); border: 1px solid var(--chip-line); position: relative; flex: none;
+    background-image: linear-gradient(var(--chip-line), var(--chip-line)), linear-gradient(var(--chip-line), var(--chip-line)), linear-gradient(var(--chip-line), var(--chip-line));
+    background-size: 100% 1px, 1px 100%, 1px 100%; background-position: 0 50%, 33% 0, 66% 0; background-repeat: no-repeat;
+  }
+  .slotlbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-right: 22px; }
+  .carrier { font-size: 24px; font-weight: 780; letter-spacing: -.02em; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nets { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .roles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 20px; }
+  .role { font-size: 11px; font-weight: 650; padding: 2px 7px; border-radius: 6px; background: var(--raise); color: var(--muted); }
+  .role.on { background: var(--accent-soft); color: var(--accent); }
+  .role.off { background: var(--bad-soft); color: var(--bad); }
+
+  .linkbar {
+    margin-top: 12px; display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  }
+  .linkbar .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--raise); color: var(--muted); }
+  .linkbar.wifi .ico { background: var(--wifi-soft); color: var(--wifi); }
+  .linkbar.cell .ico { background: var(--cell-soft); color: var(--cell); }
+  .linkbar .t1 { font-weight: 650; }
+  .linkbar .t2 { font-size: 13px; color: var(--muted); }
+
+  /* ---------- panels ---------- */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 6px 16px; margin-top: 14px; }
+  .item { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; }
+  .item + .item { border-top: 1px solid var(--line); }
+  .label { font-weight: 650; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .note { border-radius: var(--r-sm); padding: 10px 12px; font-size: 13px; margin: 10px 0 0; }
+  .note.warn { background: var(--warn-soft); color: var(--warn); }
+  .note.err, .note.bad { background: var(--bad-soft); color: var(--bad); }
+
+  .switch { position: relative; width: 50px; height: 30px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch span { position: absolute; inset: 0; background: var(--faint); border-radius: 999px; transition: background .15s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .18s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- profiles ---------- */
+  .ptabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+  .ptab {
+    text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-md);
+    padding: 12px 14px; cursor: pointer; position: relative; min-width: 0;
+  }
+  .ptab .pn { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+  .ptab .pn svg { flex: none; }
+  .ptab .ps { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+  .ptab .live { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+  .ptab[data-p=W] .pn { color: var(--wifi); }
+  .ptab[data-p=C] .pn { color: var(--cell); }
+  .ptab.sel[data-p=W] { border-color: var(--wifi); background: var(--wifi-soft); }
+  .ptab.sel[data-p=C] { border-color: var(--cell); background: var(--cell-soft); }
+
+  .pbody { border-radius: var(--r-lg); margin-top: 10px; padding: 4px 16px 14px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--accent); }
+  .group { padding: 14px 0 4px; }
+  .group + .group { border-top: 1px solid var(--line); }
+  .gtitle { font-weight: 700; margin-bottom: 10px; }
+  .simline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; }
+  .simline .nm { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .simline .nm small { display: block; color: var(--muted); font-weight: 500; font-size: 12px; }
+  .netsel { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .netsel span { font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+  .chips { display: inline-flex; background: var(--raise); border-radius: 12px; padding: 3px; gap: 3px; }
+  .chips button { border: 0; background: transparent; color: var(--muted); font-weight: 650; font-size: 14px; padding: 8px 13px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+  .chips button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+  .chips button:disabled { opacity: .35; cursor: default; }
+  .chips.power button.on[data-v=OFF] { color: var(--bad); }
+  .chips.power button.on[data-v=ON] { color: var(--ok); }
+  .roleline { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 10px; padding: 5px 0; }
+  .roleline .chips { width: 100%; }
+  .roleline .chips button { flex: 1; padding: 8px 6px; overflow: hidden; text-overflow: ellipsis; }
+  .roleline > span { font-weight: 600; }
+
+  select {
+    flex: 1; min-width: 0; background: var(--raise); border: 1px solid transparent; border-radius: 10px; padding: 9px 30px 9px 12px; appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size: 5px 5px; background-repeat: no-repeat;
+  }
+  input[type=number]:disabled { opacity: .6; }
+  input[type=number] { width: 100%; background: var(--raise); border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; margin-top: 6px; }
+  select:focus, input:focus { outline: none; border-color: var(--accent); }
+
+  /* ---------- advanced & log ---------- */
+  details summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; padding: 14px 0; font-weight: 650; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary svg { transition: transform .2s; color: var(--muted); }
+  details[open] summary svg { transform: rotate(180deg); }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+  .grid2 > div { min-width: 0; }
+  .sub small { display: block; font-size: 11px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .fp { font: 11.5px/1.45 ui-monospace, Menlo, monospace; word-break: break-all; white-space: pre-line; color: var(--muted); margin: 8px 0 14px; }
+  .btn { border: 0; font-weight: 650; white-space: nowrap; border-radius: 12px; padding: 12px 16px; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.ghost { background: var(--raise); }
+  .btn.small { padding: 7px 12px; font-size: 13px; border-radius: 9px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .loghead { display: flex; justify-content: space-between; align-items: center; padding: 12px 0 10px; }
+  pre#log { margin: 0 0 14px; background: var(--raise); border-radius: 12px; padding: 10px 12px; font: 11.5px/1.55 ui-monospace, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 22px; }
+  footer b { color: var(--text); font-weight: 650; }
+
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
+    background: var(--surface); border-top: 1px solid var(--line); display: flex; gap: 10px; justify-content: center;
+    transform: translateY(110%); transition: transform .2s; }
+  .savebar.show { transform: none; }
+  .savebar .btn { flex: 1; max-width: 290px; }
+  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 86px); transform: translate(-50%, 16px);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; opacity: 0; transition: .2s;
+    pointer-events: none; max-width: calc(100% - 32px); text-align: center; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .preview { text-align: center; font-size: 12px; color: var(--warn); margin-bottom: 12px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ======================= themes ======================= */
+  /* Minimal: monochrome, flat, follows light/dark */
+  html[data-theme=minimal] {
+    --bg: #fafafa; --bg2: #fafafa; --surface: #ffffff; --raise: #f1f1f2; --text: #18181b; --muted: #71717a; --faint: #d4d4d8; --line: #e4e4e7;
+    --wifi: #18181b; --wifi-soft: #f1f1f2; --cell: #18181b; --cell-soft: #f1f1f2; --chip: #a1a1aa; --chip-line: #8a8a93;
+    --ok: #15803d; --ok-soft: #f0fdf4; --bad: #b91c1c; --bad-soft: #fef2f2; --warn: #a16207; --warn-soft: #fefce8;
+    --card-sim: #ffffff; --r-lg: 12px; --r-md: 10px; --r-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme=minimal] {
+      --bg: #09090b; --bg2: #09090b; --surface: #111113; --raise: #1c1c1f; --text: #fafafa; --muted: #8b8b94; --faint: #3f3f46; --line: #27272a;
+      --wifi: #fafafa; --wifi-soft: #1c1c1f; --cell: #fafafa; --cell-soft: #1c1c1f; --chip: #52525b; --chip-line: #3f3f46;
+      --ok: #4ade80; --ok-soft: #0f1f14; --bad: #f87171; --bad-soft: #2a1212; --warn: #facc15; --warn-soft: #29230a; --card-sim: #111113;
+    }
+  }
+  html[data-theme=minimal] body { background: var(--bg); }
+  html[data-theme=minimal] .simwrap.off { filter: none; opacity: .4; }
+  html[data-theme=minimal] .ptab.sel { border-color: var(--text); background: var(--surface); }
+  html[data-theme=minimal] .ptab[data-p] .pn { color: var(--text); }
+  html[data-theme=minimal] .pbody { border-top-width: 1px; }
+  html[data-theme=minimal] .btn.primary { color: var(--bg); }
+  html[data-theme=minimal] .switch input:checked + span::after { background: var(--bg); }
+  html[data-theme=minimal] .chips button.on { box-shadow: inset 0 0 0 1px var(--line); }
+
+  /* Neon terminal themes: shared look */
+  html[data-theme=acid] {
+    --bg: #0a0a0f; --bg2: #111118; --surface: #111118; --raise: #1a1a24;
+    --text: #e0e0f0; --muted: #6a6a8a; --faint: #2a2a3a; --line: #2a2a3a;
+    --wifi: #e8ff47; --cell: #47c8ff; --ok: #47ffaa; --bad: #ff47aa; --warn: #ffaa47; --chip: #e8ff47;
+  }
+  html[data-theme=synthwave] {
+    --bg: #0b0614; --bg2: #130b22; --surface: #130b22; --raise: #1c1131;
+    --text: #f1e9ff; --muted: #7c6aa6; --faint: #33204f; --line: #33204f;
+    --wifi: #00f0ff; --cell: #ff2bd6; --ok: #a6ff3b; --bad: #ff3d6e; --warn: #ffd23f; --chip: #ffd23f;
+  }
+  html[data-theme=toxic] {
+    --bg: #050a06; --bg2: #0b130c; --surface: #0b130c; --raise: #111d13;
+    --text: #dcffe0; --muted: #5f8a66; --faint: #1f3323; --line: #1f3323;
+    --wifi: #39ff14; --cell: #ffb000; --ok: #39ff14; --bad: #ff4d4d; --warn: #ffb000; --chip: #ffb000;
+  }
+  html[data-theme=ultraviolet] {
+    --bg: #08061a; --bg2: #0f0c26; --surface: #0f0c26; --raise: #171336;
+    --text: #ece9ff; --muted: #706a9e; --faint: #2a2556; --line: #2a2556;
+    --wifi: #7df9ff; --cell: #b47cff; --ok: #5dffb0; --bad: #ff5fa2; --warn: #ffd166; --chip: #7df9ff;
+  }
+
+  html.neon {
+    --wifi-soft: color-mix(in srgb, var(--wifi) 10%, transparent); --cell-soft: color-mix(in srgb, var(--cell) 11%, transparent);
+    --ok-soft: color-mix(in srgb, var(--ok) 12%, transparent); --bad-soft: color-mix(in srgb, var(--bad) 13%, transparent);
+    --warn-soft: color-mix(in srgb, var(--warn) 10%, transparent); --chip-line: color-mix(in srgb, var(--chip) 60%, #000);
+    --card-sim: var(--bg2); --r-lg: 3px; --r-md: 2px; --r-sm: 2px;
+    --mono: "IBM Plex Mono", "JetBrains Mono", "Roboto Mono", "DejaVu Sans Mono", monospace;
+    --sans: "IBM Plex Sans", system-ui, sans-serif;
+  }
+  html.neon body { font-family: var(--mono); font-size: 14px; background: var(--bg); }
+  html.neon body::before {
+    background:
+      radial-gradient(80% 45% at 10% -5%, color-mix(in srgb, var(--wifi) 13%, transparent), transparent 60%),
+      radial-gradient(80% 45% at 100% 8%, color-mix(in srgb, var(--cell) 15%, transparent), transparent 60%),
+      linear-gradient(color-mix(in srgb, var(--line) 35%, transparent) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(90deg, color-mix(in srgb, var(--line) 35%, transparent) 1px, transparent 1px) 0 0 / 40px 40px,
+      var(--bg); }
+  html.neon h1 { font-family: var(--sans); font-weight: 650; font-size: 28px; letter-spacing: -.01em;
+    background: linear-gradient(90deg, var(--wifi), var(--cell)); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 12px color-mix(in srgb, var(--wifi) 35%, transparent)); }
+  html.neon .label, html.neon .gtitle, html.neon .ptab .pn, html.neon .simline .nm, html.neon .roleline > span,
+  html.neon .linkbar .t1, html.neon .carrier { font-family: var(--sans); }
+  html.neon .pill { border-radius: 2px; border: 1px solid currentColor; background: transparent; font-family: var(--mono); }
+  html.neon .pill.ok { box-shadow: 0 0 14px color-mix(in srgb, var(--ok) 45%, transparent), inset 0 0 8px color-mix(in srgb, var(--ok) 15%, transparent); }
+  html.neon .simwrap { border-radius: 3px; }
+  html.neon .simwrap:not(.off) { background: linear-gradient(140deg, var(--wifi), var(--cell));
+    filter: drop-shadow(0 0 14px color-mix(in srgb, var(--wifi) 38%, transparent)); transform: translateZ(0); }
+  html.neon .simcard { border-radius: 2px; aspect-ratio: auto; min-height: 150px; height: 100%; }
+  html.neon .simwrap:not(.off) .carrier { color: #fff; text-shadow: 0 0 16px color-mix(in srgb, var(--cell) 55%, transparent); }
+  html.neon .chip { border-radius: 3px; box-shadow: 0 0 12px color-mix(in srgb, var(--chip) 70%, transparent); }
+  html.neon .role { border-radius: 2px; border: 1px solid var(--line); background: transparent; }
+  html.neon .role.on { border-color: var(--wifi); color: var(--wifi); background: var(--wifi-soft); box-shadow: 0 0 8px -2px var(--wifi); }
+  html.neon .role.off { border-color: var(--bad); }
+  html.neon .linkbar, html.neon .panel, html.neon .ptab, html.neon .pbody { border-radius: 3px; background: color-mix(in srgb, var(--bg2) 88%, transparent); }
+  html.neon .linkbar .ico { border-radius: 2px; border: 1px solid currentColor; box-shadow: 0 0 14px -2px currentColor; }
+  html.neon .linkbar.wifi { border-color: var(--wifi); box-shadow: 0 0 20px color-mix(in srgb, var(--wifi) 18%, transparent), inset 0 0 14px color-mix(in srgb, var(--wifi) 5%, transparent); }
+  html.neon .linkbar.cell { border-color: var(--cell); box-shadow: 0 0 20px color-mix(in srgb, var(--cell) 18%, transparent), inset 0 0 14px color-mix(in srgb, var(--cell) 5%, transparent); }
+  html.neon .ptab.sel[data-p=W] { box-shadow: 0 0 22px color-mix(in srgb, var(--wifi) 35%, transparent), inset 0 0 14px color-mix(in srgb, var(--wifi) 8%, transparent); }
+  html.neon .ptab.sel[data-p=C] { box-shadow: 0 0 22px color-mix(in srgb, var(--cell) 35%, transparent), inset 0 0 14px color-mix(in srgb, var(--cell) 8%, transparent); }
+  html.neon .ptab .pn { text-shadow: 0 0 12px currentColor; }
+  html.neon .ptab .live { border-radius: 1px; box-shadow: 0 0 10px var(--ok); }
+  html.neon .pbody { border-top: 2px solid var(--accent); box-shadow: 0 -8px 24px -12px var(--accent); }
+  html.neon .chips { border-radius: 2px; background: transparent; border: 1px solid var(--line); }
+  html.neon .chips button { border-radius: 1px; font-family: var(--mono); font-weight: 500; }
+  html.neon .chips button.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px var(--accent), 0 0 14px -2px var(--accent); text-shadow: 0 0 8px var(--accent); }
+  html.neon .chips.power button.on[data-v=ON] { color: var(--ok); background: var(--ok-soft); box-shadow: inset 0 0 0 1px var(--ok), 0 0 14px -2px var(--ok); text-shadow: 0 0 8px var(--ok); }
+  html.neon .chips.power button.on[data-v=OFF] { color: var(--bad); background: var(--bad-soft); box-shadow: inset 0 0 0 1px var(--bad), 0 0 14px -2px var(--bad); text-shadow: 0 0 8px var(--bad); }
+  html.neon select, html.neon input[type=number] { border-radius: 2px; border: 1px solid var(--line); background-color: transparent; font-family: var(--mono); }
+  html.neon .switch span { border-radius: 2px; background: var(--raise); border: 1px solid var(--line); }
+  html.neon .switch span::after { border-radius: 1px; background: var(--muted); box-shadow: none; }
+  html.neon .switch input:checked + span { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); box-shadow: 0 0 16px var(--accent); }
+  html.neon .switch input:checked + span::after { background: var(--accent); }
+  html.neon .note { border-radius: 2px; border-left: 2px solid currentColor; }
+  html.neon .btn { border-radius: 2px; font-family: var(--mono); }
+  html.neon .btn.ghost { background: transparent; border: 1px solid var(--line); }
+  html.neon .btn.primary { background: transparent; color: var(--accent); border: 1px solid var(--accent); box-shadow: 0 0 18px -2px var(--accent); text-shadow: 0 0 8px var(--accent); }
+  html.neon pre#log { border-radius: 2px; background: var(--bg); border: 1px solid var(--line); color: var(--ok); text-shadow: 0 0 6px color-mix(in srgb, var(--ok) 40%, transparent); }
+  html.neon footer b { background: linear-gradient(90deg, var(--wifi), var(--cell)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  /* Theme picker */
+  .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-bottom: 14px; }
+  .theme { border: 1px solid var(--line); background: var(--raise); border-radius: var(--r-sm); padding: 8px; cursor: pointer; text-align: left; min-width: 0; }
+  .theme.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .theme .sw { height: 34px; border-radius: 4px; position: relative; overflow: hidden; margin-bottom: 6px; border: 1px solid rgba(127,127,127,.25); }
+  .theme .sw i { position: absolute; bottom: 7px; height: 5px; border-radius: 2px; }
+  .theme .sw i:nth-child(1) { left: 8px; width: 38%; }
+  .theme .sw i:nth-child(2) { right: 8px; width: 28%; }
+  .theme .tn { font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div id="preview" class="preview hidden">Preview with sample data - open it from KernelSU to see your phone</div>
+
+  <header style="align-items:center">
+    <div>
+      <h1>WiFi SIM Switch</h1>
+    </div>
+    <span id="pill" class="pill idle">Loading</span>
+  </header>
+
+  <div class="simdeck" id="sims"></div>
+  <div class="linkbar" id="linkbar">
+    <div class="ico" id="linkico"></div>
+    <div><div class="t1" id="linkt1">…</div><div class="t2" id="linkt2"></div></div>
+  </div>
+  <div id="blockedNote" class="note bad hidden"></div>
+
+  <div class="panel">
+    <div class="item">
+      <div><div class="label">Enabled</div><div class="hint">Pausing turns both SIMs back on with their own network types</div></div>
+      <label class="switch"><input type="checkbox" id="ENABLED"><span></span></label>
+    </div>
+    <div class="item">
+      <div><div class="label">Only WiFi with internet</div><div class="hint">WiFi without internet counts as off WiFi</div></div>
+      <label class="switch"><input type="checkbox" id="REQUIRE_INTERNET"><span></span></label>
+    </div>
+  </div>
+
+  <div class="ptabs" id="ptabs"></div>
+  <div class="pbody" id="pbody"></div>
+
+  <div class="panel">
+    <div class="loghead"><span class="label">Theme</span></div>
+    <div class="themes" id="themes"></div>
+  </div>
+
+  <div class="panel">
+    <details>
+      <summary>Advanced <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="grid2">
+        <div><div class="sub">Check every (s)</div><input type="number" id="INTERVAL" min="2" max="120"></div>
+        <div><div class="sub">Wait to act (s)</div><input type="number" id="DEBOUNCE" min="0" max="120"></div>
+      </div>
+      <div class="label" style="margin-top:16px">ISub transaction codes</div>
+      <div class="hint">Needed to turn SIMs off or on, choose the data, calls and SMS SIM, and block mobile data per SIM. They differ between ROM builds, and a wrong code calls a different system method. The module reads them from your ROM automatically. If that fails, take them from your build's framework.jar (ISub$Stub) and confirm them below. Network types work without them.</div>
+      <div class="grid2">
+        <div><div class="sub">Data SIM<small>setDefaultDataSubId</small></div><input type="number" id="TX_SET_DATA" min="1" max="999"></div>
+        <div><div class="sub">SIM on/off<small>setUiccApplicationsEnabled</small></div><input type="number" id="TX_SET_UICC" min="1" max="999"></div>
+        <div><div class="sub">Calls SIM<small>setDefaultVoiceSubId</small></div><input type="number" id="TX_SET_VOICE" min="1" max="999"></div>
+        <div><div class="sub">SMS SIM<small>setDefaultSmsSubId</small></div><input type="number" id="TX_SET_SMS" min="1" max="999"></div>
+        <div><div class="sub">Data block<small>setDataEnabledForReason</small></div><input type="number" id="TX_DATA_REASON" min="1" max="999"></div>
+        <div><div class="sub">Data block check<small>isDataEnabledForReason</small></div><input type="number" id="TX_IS_DATA_REASON" min="1" max="999"></div>
+      </div>
+      <div class="item" style="padding-bottom:0;margin-top:6px">
+        <div style="min-width:0"><div class="label">This build</div><div class="hint" id="fpState"></div></div>
+        <button class="btn small ghost" id="trustBtn">Confirm codes</button>
+      </div>
+      <div class="fp" id="fp"></div>
+    </details>
+  </div>
+
+  <div class="panel">
+    <div class="loghead"><span class="label">Log</span><button class="btn small ghost" id="logBtn">Refresh</button></div>
+    <pre id="log">…</pre>
+  </div>
+
+  <footer id="footer"></footer>
+
+  <div class="savebar" id="savebar">
+    <button class="btn ghost" id="discardBtn">Discard</button>
+    <button class="btn primary" id="saveBtn">Save and apply</button>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+<script>
+const MOD = '/data/adb/modules/wifisimoff';
+const ST = '/data/adb/wifisimoff';
+const PK = ['SIM0', 'SIM1', 'DATA', 'VOICE', 'SMS', 'MDATA'];
+const KEYS = ['ENABLED', 'REQUIRE_INTERNET', 'INTERVAL', 'DEBOUNCE', 'TX_SET_DATA', 'TX_SET_UICC', 'TX_SET_VOICE', 'TX_SET_SMS', 'TX_DATA_REASON', 'TX_IS_DATA_REASON',
+  ...['W', 'C'].flatMap(p => PK.map(k => `${p}_${k}`))];
+const NETOPT = [
+  ['ORIG', 'Its own setting'],
+  ['ALL', '5G, 4G, 3G, 2G'],
+  ['4G3G2G', '4G, 3G, 2G'],
+  ['4G2G', '4G and 2G'],
+  ['4G', '4G only'],
+  ['2G', '2G only'],
+];
+const PROFILES = { W: 'On WiFi', C: 'Off WiFi' };
+const ICON = {
+  wifi: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5.5 12.4a10 10 0 0 1 13 0"/><path d="M9 15.9a5 5 0 0 1 6 0"/><circle cx="12" cy="19.2" r="1.2" fill="currentColor"/></svg>',
+  cell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="15" width="3.2" height="5" rx="1"/><rect x="8.3" y="11.5" width="3.2" height="8.5" rx="1"/><rect x="13.6" y="8" width="3.2" height="12" rx="1"/><rect x="18.9" y="4" width="3.2" height="16" rx="1"/></svg>',
+  pause: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>',
+};
+const HAS_KSU = typeof ksu !== 'undefined';
+
+// ---------- exec (KernelSU WebUI API) ----------
+let cbn = 0;
+function exec(cmd) {
+  if (!HAS_KSU) return Promise.resolve(mockExec(cmd));
+  return new Promise((resolve) => {
+    const name = `__wss_cb_${Date.now()}_${cbn++}`;
+    window[name] = (errno, stdout, stderr) => { delete window[name]; resolve({ errno, stdout, stderr }); };
+    try { ksu.exec(cmd, '{}', name); }
+    catch (e) { delete window[name]; resolve({ errno: 1, stdout: '', stderr: String(e) }); }
+  });
+}
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function parseKV(text) {
+  const o = { sims: [] };
+  for (const line of (text || '').split('\n')) {
+    const i = line.indexOf('='); if (i < 1) continue;
+    const k = line.slice(0, i), v = line.slice(i + 1);
+    if (k === 'sim') { const [sub, slot, name, en] = v.split('|'); if (!o.sims.some(s => s.sub === sub)) o.sims.push({ sub, slot, name, en: en === '1' }); }
+    else o[k] = v;
+  }
+  // A SIM that is turned off reports slot -1 - place it using the slot->sub map
+  for (const sim of o.sims) if (!/^[01]$/.test(sim.slot))
+    for (const n of ['0', '1']) if (o['slot_sub' + n] === sim.sub) sim.slot = n;
+  return o;
+}
+function gens(mask) {
+  if (!mask || /^[01]+$/.test(mask)) return '';
+  const t = mask.split('|'), g = [];
+  if (t.includes('NR')) g.push('5G');
+  if (t.some(x => x.startsWith('LTE'))) g.push('4G');
+  if (t.some(x => /UMTS|HSPA|HSDPA|HSUPA|TD_SCDMA/.test(x))) g.push('3G');
+  if (t.some(x => /GSM|GPRS|EDGE/.test(x))) g.push('2G');
+  return g.join(', ');
+}
+const simName = (slot) => ((st.sims || []).find(s => String(s.slot) === String(slot)) || {}).name || `SIM${+slot + 1}`;
+const listJoin = (a) => a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+
+// Write markup only when it changed: rebuilding the DOM every poll made the page stutter
+const _html = {};
+function setHTML(id, html) { if (_html[id] === html) return; _html[id] = html; $(id).innerHTML = html; }
+
+// ---------- state ----------
+let st = { sims: [] }, saved = {}, form = {}, tab = null;
+
+function renderStatus() {
+  const running = st.running === '1', enabled = st.ENABLED === '1';
+  let cls = 'ok', txt = 'Active';
+  if (!running && HAS_KSU) { cls = 'bad'; txt = 'Not running'; }
+  else if (!enabled || st.status === 'paused') { cls = 'idle'; txt = 'Paused'; }
+  else if (st.status === 'blocked') { cls = 'warn'; txt = 'Blocked'; }
+  $('pill').className = 'pill ' + cls; $('pill').textContent = txt;
+
+  const author = st.mod_author || 'Paulo', ver = st.mod_version || '';
+  setHTML('footer', `WiFi SIM Switch ${esc(ver)}, made by <b>${esc(author)}</b>`);
+
+  // SIM cards
+  const sims = [...st.sims].sort((a, b) => a.slot - b.slot);
+  setHTML('sims', sims.map(s => {
+    const off = !s.en, roles = [];
+    if (off) roles.push('<span class="role off">Off</span>');
+    if (s.sub === st.voice_sub) roles.push('<span class="role">Calls</span>');
+    if (s.sub === st.sms_sub) roles.push('<span class="role">SMS</span>');
+    const blocked = st['dallow_' + s.sub] === '00000000';
+    if (blocked && !off) roles.push('<span class="role">Data blocked</span>');
+    else if (s.sub === st.data_sub && !off) roles.push(st.cell_internet === '1' ? '<span class="role on">Data</span>' : '<span class="role">Data off</span>');
+    const g = off ? 'Turned off' : (gens(st['mask' + s.slot]) || '');
+    return `<div class="simwrap ${off ? 'off' : ''}"><div class="simcard">
+      <div class="simtop"><div class="chip"></div><div class="slotlbl">SIM${+s.slot + 1}</div></div>
+      <div><div class="carrier">${esc(s.name || 'SIM')}</div><div class="nets">${esc(g)}</div>
+      <div class="roles">${roles.join('')}</div></div></div></div>`;
+  }).join('') || '<div class="hint">No SIM detected</div>');
+
+  // Link bar
+  const lb = $('linkbar'), paused = !enabled || st.status === 'paused';
+  const wifi = st.wifi === '1';
+  lb.className = 'linkbar ' + (paused ? '' : (wifi ? 'wifi' : 'cell'));
+  setHTML('linkico', paused ? ICON.pause : (wifi ? ICON.wifi : ICON.cell));
+  $('linkt1').textContent = wifi ? 'Connected to WiFi' : 'Not on WiFi';
+  let t2 = 'Paused - both SIMs on';
+  if (!paused) {
+    if (st.status === 'blocked') t2 = 'Blocked - see below';
+    else if (st.state) {
+      const since = ((st.since || '').split(' ')[1] || '').slice(0, 5);
+      t2 = `${st.state === 'wifi' ? 'On WiFi' : 'Off WiFi'} profile applied${since ? ' at ' + since : ''}`;
+    } else t2 = 'Applying…';
+  }
+  $('linkt2').textContent = t2;
+
+  const bn = $('blockedNote');
+  if (st.status === 'blocked' && enabled) {
+    bn.textContent = 'These settings turn SIMs off or choose the data, calls or SMS SIM, which needs ISub codes not yet confirmed for this ROM build. Check them under Advanced, then tap Confirm codes.';
+    bn.classList.remove('hidden');
+  } else bn.classList.add('hidden');
+
+  $('fp').textContent = (st.fp ? `framework.jar ${st.fp}\n` : '') + (st.rom || '');
+  const auto = st.auto_codes === '1';
+  for (const k of ['TX_SET_DATA', 'TX_SET_UICC', 'TX_SET_VOICE', 'TX_SET_SMS', 'TX_DATA_REASON', 'TX_IS_DATA_REASON']) $(k).disabled = auto;
+  $('trustBtn').classList.toggle('hidden', auto);
+  $('fpState').textContent = auto ? 'Codes read from this ROM automatically'
+    : st.fp_ok === '1'
+    ? (st.fp_known === '1' ? 'Known build - codes built in' : 'Codes confirmed for this build')
+    : (st.fp_saved ? 'framework.jar changed since the codes were confirmed' : 'Codes not confirmed yet');
+  if (!trustArmed) $('trustBtn').textContent = 'Confirm codes';
+  $('trustBtn').disabled = st.fp_ok === '1';
+}
+
+// ---------- profiles ----------
+const isOff = (p, n) => form[`${p}_SIM${n}`] === 'OFF';
+function summary(p) {
+  const on = [0, 1].filter(n => !isOff(p, n)).map(simName);
+  const s = [on.length === 2 ? 'Both SIMs on' : `Only ${on[0]} on`];
+  const v = form[`${p}_VOICE`], d = form[`${p}_DATA`];
+  if (v !== 'keep') s.push(`calls on ${simName(v)}`);
+  if (d !== 'keep') s.push(`data on ${simName(d)}`);
+  if (form[`${p}_MDATA`] === '0') s.push('mobile data off');
+  return s.join(', ');
+}
+function profileIssues(p) {
+  const errs = [], warns = [];
+  if (isOff(p, 0) && isOff(p, 1)) errs.push('At least one SIM has to stay on.');
+  for (const [k, l] of [['DATA', 'Data'], ['VOICE', 'Calls'], ['SMS', 'SMS']]) {
+    const v = form[`${p}_${k}`];
+    if (v !== 'keep' && isOff(p, v)) errs.push(`${l} is set to ${simName(v)}, which is off here.`);
+  }
+  const voiceSlot = ['0', '1'].find(n => st['slot_sub' + n] && st['slot_sub' + n] === st.voice_sub);
+  if (voiceSlot !== undefined && isOff(p, voiceSlot) && form[`${p}_VOICE`] === 'keep')
+    warns.push(`${simName(voiceSlot)} handles your calls and is off here. Pick a SIM for calls, or Android will ask every time.`);
+  const offs = [0, 1].filter(n => isOff(p, n)).map(simName);
+  if (offs.length && !errs.length) warns.push(`${listJoin(offs)} can't get calls or SMS here, Wi-Fi calling included.`);
+  if ([0, 1].some(n => form[`${p}_SIM${n}`] === '4G')) warns.push('With "4G only" there is no fallback: where there is no 4G, that SIM has no service.');
+  return { errs, warns };
+}
+const chips = (key, opts, cls = '') =>
+  `<div class="chips ${cls}" data-chips="${key}">${opts.map(([v, l, dis]) =>
+    `<button type="button" data-v="${v}" ${dis ? 'disabled' : ''} class="${String(form[key]) === String(v) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
+
+function renderTabs() {
+  const live = st.status === 'active' ? (st.state === 'wifi' ? 'W' : st.state === 'cell' ? 'C' : '') : '';
+  if (!tab) tab = live || 'W';
+  setHTML('ptabs', ['W', 'C'].map(p => `
+    <button type="button" class="ptab ${tab === p ? 'sel' : ''}" data-p="${p}" aria-pressed="${tab === p}">
+      ${live === p ? '<span class="live" title="Applied now"></span>' : ''}
+      <div class="pn">${p === 'W' ? ICON.wifi : ICON.cell}${PROFILES[p]}</div>
+      <div class="ps">${esc(summary(p))}</div>
+    </button>`).join(''));
+  document.documentElement.style.setProperty('--accent', `var(--${tab === 'W' ? 'wifi' : 'cell'})`);
+  document.documentElement.style.setProperty('--accent-soft', `var(--${tab === 'W' ? 'wifi' : 'cell'}-soft)`);
+}
+function renderProfile() {
+  const p = tab;
+  const simLines = [0, 1].map(n => {
+    const k = `${p}_SIM${n}`, off = isOff(p, n);
+    return `<div class="simline">
+        <div class="nm">${esc(simName(n))}<small>SIM${n + 1}</small></div>
+        <div class="chips power" data-power="${k}">
+          <button type="button" data-v="OFF" class="${off ? 'on' : ''}">Off</button>
+          <button type="button" data-v="ON" class="${off ? '' : 'on'}">On</button>
+        </div>
+        ${off ? '' : `<div class="netsel"><span>Networks</span><select data-k="${k}">${NETOPT.map(([v, l]) =>
+          `<option value="${v}" ${form[k] === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`}
+      </div>`;
+  }).join('');
+  const roleOpts = (k) => [['keep', 'Keep'], ...[0, 1].map(n => [String(n), simName(n), isOff(p, n)])];
+  const { errs, warns } = profileIssues(p);
+  setHTML('pbody', `
+    <div class="group"><div class="gtitle">SIMs</div>${simLines}</div>
+    <div class="group"><div class="gtitle">Use for</div>
+      ${[['DATA', 'Data'], ['VOICE', 'Calls'], ['SMS', 'SMS']].map(([k, l]) =>
+        `<div class="roleline"><span>${l}</span>${chips(`${p}_${k}`, roleOpts(k))}</div>`).join('')}
+    </div>
+    <div class="group"><div class="gtitle">Mobile data</div>
+      <div class="hint" style="margin:-4px 0 6px">On: only the data SIM can use mobile data. Off: blocked on every SIM. Blocks are per SIM, so HyperOS's mobile data switch can't undo them.</div>
+      <div class="roleline"><span></span>${chips(`${p}_MDATA`, [['keep', 'Keep'], ['1', 'On'], ['0', 'Off']])}</div>
+      ${errs.map(e => `<div class="note err">${esc(e)}</div>`).join('')}${warns.map(w => `<div class="note warn">${esc(w)}</div>`).join('')}
+    </div>`);
+}
+function renderForm() {
+  $('ENABLED').checked = form.ENABLED === '1';
+  $('REQUIRE_INTERNET').checked = form.REQUIRE_INTERNET === '1';
+  for (const k of ['INTERVAL', 'DEBOUNCE', 'TX_SET_DATA', 'TX_SET_UICC', 'TX_SET_VOICE', 'TX_SET_SMS', 'TX_DATA_REASON', 'TX_IS_DATA_REASON'])
+    if (document.activeElement !== $(k)) $(k).value = form[k] ?? '';
+  renderTabs();
+  if (!$('pbody').contains(document.activeElement) || document.activeElement.tagName !== 'SELECT') renderProfile();
+  const dirty = KEYS.some(k => String(form[k]) !== String(saved[k]));
+  $('savebar').classList.toggle('show', dirty);
+}
+
+// ---------- actions ----------
+let busy = false, lastRaw = '';
+async function refresh(full) {
+  if (busy) return;            // never stack polls if the phone is slow to answer
+  busy = true;
+  let r;
+  try { r = await exec(`sh ${MOD}/status.sh`); } finally { busy = false; }
+  if (!full && r.stdout === lastRaw) return;   // nothing changed - leave the page alone
+  lastRaw = r.stdout;
+  st = parseKV(r.stdout);
+  try { localStorage.setItem('wss_last', r.stdout); } catch (e) {}
+  if (full) {
+    // Don't throw away edits made while the first live read was still running
+    const dirty = KEYS.some(k => String(form[k] ?? '') !== String(saved[k] ?? ''));
+    saved = {}; for (const k of KEYS) saved[k] = st[k];
+    if (!dirty) form = { ...saved };
+    if (st.theme) applyTheme(st.theme);
+  }
+  renderStatus(); renderForm();
+}
+async function loadLog() {
+  const r = await exec(`tail -n 80 ${MOD}/log.txt 2>/dev/null`);
+  const pre = $('log'); pre.textContent = (r.stdout || '').trim() || 'Nothing logged since the last boot';
+  pre.scrollTop = pre.scrollHeight;
+}
+function validate() {
+  const num = (k, lo, hi, label) => { const n = parseInt(form[k], 10); if (isNaN(n) || n < lo || n > hi) throw `${label} must be ${lo}-${hi}`; form[k] = String(n); };
+  num('INTERVAL', 2, 120, 'Check every'); num('DEBOUNCE', 0, 120, 'Wait to act');
+  for (const k of ['TX_SET_DATA', 'TX_SET_UICC', 'TX_SET_VOICE', 'TX_SET_SMS', 'TX_DATA_REASON', 'TX_IS_DATA_REASON']) num(k, 1, 999, k);
+  for (const p of ['W', 'C']) { const { errs } = profileIssues(p); if (errs.length) { tab = p; renderForm(); throw `${PROFILES[p]}: ${errs[0]}`; } }
+  const re = { SIM0: /^(OFF|ORIG|ALL|4G3G2G|4G2G|4G|2G)$/, SIM1: /^(OFF|ORIG|ALL|4G3G2G|4G2G|4G|2G)$/, DATA: /^(keep|0|1)$/, VOICE: /^(keep|0|1)$/, SMS: /^(keep|0|1)$/, MDATA: /^(keep|0|1)$/ };
+  for (const p of ['W', 'C']) for (const k of PK) if (!re[k].test(form[`${p}_${k}`])) throw `Invalid ${p}_${k}`;
+  for (const k of ['ENABLED', 'REQUIRE_INTERNET']) if (!/^[01]$/.test(form[k])) throw `Invalid ${k}`;
+}
+async function save() {
+  try { validate(); } catch (e) { toast(String(e)); return; }
+  const lines = KEYS.map(k => `'${k}=${form[k]}'`).join(' ');
+  const r = await exec(`mkdir -p ${ST} && printf '%s\\n' ${lines} > ${ST}/config.sh.tmp && mv ${ST}/config.sh.tmp ${ST}/config.sh`);
+  if (r.errno !== 0) { toast('Not saved: ' + (r.stderr || 'error ' + r.errno)); return; }
+  saved = { ...form };
+  renderForm();
+  toast(`Saved - applies within ${form.INTERVAL} s`);
+  setTimeout(() => { refresh(false); loadLog(); }, (parseInt(form.INTERVAL, 10) + 3) * 1000);
+}
+let trustArmed = false;
+async function trust() {
+  if (!trustArmed) { trustArmed = true; $('trustBtn').textContent = 'Tap again to confirm'; setTimeout(() => { trustArmed = false; renderStatus(); }, 4000); return; }
+  trustArmed = false;
+  const r = await exec(`sh ${MOD}/confirm.sh`);
+  toast(r.errno === 0 ? 'Codes confirmed for this build' : 'Not confirmed: ' + r.stderr);
+  refresh(false);
+}
+
+
+// ---------- themes ----------
+const THEMES = [
+  ['default', 'Default', null], ['minimal', 'Minimal', null],
+  ['acid', 'Acid', ['#0a0a0f', '#e8ff47', '#47c8ff']], ['synthwave', 'Synthwave', ['#0b0614', '#00f0ff', '#ff2bd6']],
+  ['toxic', 'Toxic', ['#050a06', '#39ff14', '#ffb000']], ['ultraviolet', 'Ultraviolet', ['#08061a', '#7df9ff', '#b47cff']],
+];
+const NEON = ['acid', 'synthwave', 'toxic', 'ultraviolet'];
+let theme = document.documentElement.dataset.theme || 'default';
+function applyTheme(t) {
+  theme = THEMES.some(x => x[0] === t) ? t : 'default';
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  root.classList.toggle('neon', NEON.includes(theme));
+  // IBM Plex for the terminal themes - loaded only when needed; falls back to the system monospace offline
+  if (NEON.includes(theme) && !document.getElementById('plex')) {
+    const l = document.createElement('link'); l.id = 'plex'; l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@500;600;700&display=swap';
+    document.head.appendChild(l);
+  }
+  try { localStorage.setItem('wss_theme', theme); } catch (e) {}
+  renderThemes();
+}
+function renderThemes() {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  setHTML('themes', THEMES.map(([id, name, c]) => {
+    const sw = c || (id === 'minimal' ? (dark ? ['#09090b', '#fafafa', '#52525b'] : ['#fafafa', '#18181b', '#a1a1aa'])
+                                      : (dark ? ['#0d1626', '#3fc3f2', '#f2ae45'] : ['#eef2f8', '#0a8fc2', '#c47b0a']));
+    return `<button type="button" class="theme ${theme === id ? 'sel' : ''}" data-theme-id="${id}" aria-pressed="${theme === id}">
+      <div class="sw" style="background:${sw[0]}"><i style="background:${sw[1]};box-shadow:0 0 8px ${c ? sw[1] : 'transparent'}"></i><i style="background:${sw[2]};box-shadow:0 0 8px ${c ? sw[2] : 'transparent'}"></i></div>
+      <div class="tn">${name}</div></button>`;
+  }).join(''));
+}
+async function chooseTheme(t) {
+  applyTheme(t);
+  await exec(`mkdir -p ${ST} && echo ${theme} > ${ST}/theme`);
+}
+
+// ---------- wiring ----------
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('[data-theme-id]');
+  if (th) { chooseTheme(th.dataset.themeId); return; }
+  const t = e.target.closest('.ptab');
+  if (t) { tab = t.dataset.p; renderForm(); return; }
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.disabled) return;
+  const pw = b.parentElement.dataset.power, ch = b.parentElement.dataset.chips;
+  if (pw) {
+    if (b.dataset.v === 'OFF') {
+      form[pw] = 'OFF';
+      const [, p, n] = pw.match(/^([WC])_SIM([01])$/);
+      for (const d of ['DATA', 'VOICE', 'SMS']) if (form[`${p}_${d}`] === n) form[`${p}_${d}`] = 'keep';
+    } else if (form[pw] === 'OFF') form[pw] = 'ORIG';
+  } else if (ch) form[ch] = b.dataset.v;
+  else return;
+  renderForm();
+});
+document.addEventListener('change', (e) => {
+  const k = e.target.dataset && e.target.dataset.k;
+  if (k) { form[k] = e.target.value; e.target.blur(); renderForm(); }
+});
+for (const k of ['ENABLED', 'REQUIRE_INTERNET']) $(k).addEventListener('change', e => { form[k] = e.target.checked ? '1' : '0'; renderForm(); });
+for (const k of ['INTERVAL', 'DEBOUNCE', 'TX_SET_DATA', 'TX_SET_UICC', 'TX_SET_VOICE', 'TX_SET_SMS', 'TX_DATA_REASON', 'TX_IS_DATA_REASON']) $(k).addEventListener('input', e => { form[k] = e.target.value; renderForm(); });
+$('saveBtn').onclick = save;
+$('discardBtn').onclick = () => { form = { ...saved }; renderForm(); };
+$('trustBtn').onclick = trust;
+$('logBtn').onclick = loadLog;
+
+applyTheme(theme);
+// Show the last known state at once, then read the live state in the background
+try {
+  const cached = localStorage.getItem('wss_last');
+  if (cached) {
+    st = parseKV(cached);
+    saved = {}; for (const k of KEYS) saved[k] = st[k]; form = { ...saved };
+    renderStatus(); renderForm();
+  }
+} catch (e) {}
+refresh(true);
+loadLog();
+setInterval(() => { if (!document.hidden) refresh(false); }, 8000);
+
+// ---------- preview data (only used outside KernelSU) ----------
+function mockExec(cmd) {
+  $('preview').classList.remove('hidden');
+  if (cmd.includes('status.sh')) return { errno: 0, stdout: [
+    'ENABLED=1', 'REQUIRE_INTERNET=0', 'INTERVAL=5', 'DEBOUNCE=8', 'TX_SET_DATA=31', 'TX_SET_UICC=46', 'TX_SET_VOICE=34', 'TX_SET_SMS=37', 'TX_DATA_REASON=112', 'TX_IS_DATA_REASON=113',
+    'W_SIM0=ORIG', 'W_SIM1=OFF', 'W_DATA=keep', 'W_VOICE=0', 'W_SMS=0', 'W_MDATA=0',
+    'C_SIM0=OFF', 'C_SIM1=ORIG', 'C_DATA=1', 'C_VOICE=1', 'C_SMS=1', 'C_MDATA=1',
+    'status=active', 'state=wifi', 'since=2026-10-24 16:40:11', 'running=1', 'wifi=1', 'fp_ok=1',
+    'fp=3259115906-43485600', 'fp_known=1', 'auto_codes=1', 'rom=Xiaomi/nezha/nezha:16/BP2A.250605.031.A3/OS3.0.309.0.WPACNXM:user/release-keys',
+    'data_sub=2', 'voice_sub=2', 'sms_sub=2', 'cell_internet=0',
+    'sim=2|0|MEO|1', 'sim=1|-1|NOS|0', 'slot_sub0=2', 'slot_sub1=1', 'dallow_2=00000000',
+    'mask0=GPRS|EDGE|UMTS|HSDPA|HSUPA|HSPA|LTE|HSPA+|GSM|TD_SCDMA|LTE_CA',
+    'mask1=GPRS|EDGE|UMTS|HSDPA|HSUPA|HSPA|LTE|HSPA+|GSM|TD_SCDMA|LTE_CA|NR',
+    'mod_version=v4.1', 'mod_author=Paulo'].join('\n'), stderr: '' };
+  if (cmd.includes('log.txt')) return { errno: 0, stdout: [
+    '2026-10-24 16:40:03 -> on WiFi',
+    '2026-10-24 16:40:03 SIM1 on (sub 2): Result: Parcel(00000000    \'....\')',
+    '2026-10-24 16:40:11 default calls SIM -> sub 2',
+    '2026-10-24 16:40:11 default SMS SIM -> sub 2',
+    '2026-10-24 16:40:11 SIM2 off (sub 1): Result: Parcel(00000000    \'....\')',
+    '2026-10-24 16:40:15 mobile data off'].join('\n'), stderr: '' };
+  return { errno: 0, stdout: '', stderr: '' };
+}
+</script>
+</body>
+</html>

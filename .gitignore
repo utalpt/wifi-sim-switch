@@ -1,0 +1,5 @@
+# Built in CI from IsubCodes.java - not committed
+isubcodes.dex
+*.class
+*.zip
+log.txt

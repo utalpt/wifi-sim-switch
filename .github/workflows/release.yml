@@ -1,0 +1,60 @@
+name: Release
+
+# Push a tag like v6.8 to build the module zip and publish a GitHub release.
+# module.prop must already have the same version.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check module.prop matches the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          v=$(grep '^version=' module.prop | cut -d= -f2)
+          [ "$v" = "$GITHUB_REF_NAME" ] || { echo "module.prop version $v != tag $GITHUB_REF_NAME"; exit 1; }
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build isubcodes.dex from IsubCodes.java
+        run: |
+          D8=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)d8
+          mkdir -p build
+          javac --release 8 -d build IsubCodes.java
+          "$D8" --min-api 30 --output build build/IsubCodes.class
+          mv build/classes.dex isubcodes.dex
+          sha256sum isubcodes.dex
+
+      - name: Syntax-check the scripts
+        run: for f in *.sh META-INF/com/google/android/update-binary; do sh -n "$f"; done
+
+      - name: Package the module
+        run: |
+          v=$(grep '^version=' module.prop | cut -d= -f2)
+          zip -r "wifisimoff-$v.zip" META-INF module.prop *.sh README.md LICENSE IsubCodes.java isubcodes.dex banner.png webroot
+          unzip -l "wifisimoff-$v.zip"
+          echo "ZIP=wifisimoff-$v.zip" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP }}
+          path: ${{ env.ZIP }}
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v t="## $GITHUB_REF_NAME" '$0==t{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" "$ZIP" --title "WiFi SIM Switch $GITHUB_REF_NAME" --notes-file notes.md

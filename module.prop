@@ -1,0 +1,8 @@
+id=wifisimoff
+name=WiFi SIM Switch
+version=v6.7
+versionCode=27
+author=Paulo
+description=Two SIM profiles - one on WiFi, one off WiFi: turn SIMs on/off, network type, data/calls/SMS SIM. Configure it in the WebUI.
+banner=banner.png
+updateJson=https://raw.githubusercontent.com/utalpt/wifi-sim-switch/main/update.json
