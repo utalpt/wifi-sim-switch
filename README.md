@@ -1,6 +1,6 @@
 # WiFi SIM Switch
 
-![WiFi SIM Switch](banner.png)
+![WiFi SIM Switch](docs/hero.png)
 
 [![Release](https://img.shields.io/github/v/release/utalpt/wifi-sim-switch?color=e8ff47&labelColor=13121c)](https://github.com/utalpt/wifi-sim-switch/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/utalpt/wifi-sim-switch/total?color=47c8ff&labelColor=13121c)](https://github.com/utalpt/wifi-sim-switch/releases)
