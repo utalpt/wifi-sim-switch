@@ -160,7 +160,7 @@ su -c svc data enable
 To release a new version:
 1. Bump `version` and `versionCode` in `module.prop`.
 2. Update `update.json` (version, versionCode, zipUrl) and add a section for the version to `CHANGELOG.md`.
-3. Commit, then push a tag with the same name as the version (for example `v6.8`). The workflow checks that the tag matches `module.prop`, builds the zip and publishes the release.
+3. Commit and push to `main`. When `module.prop` has a version with no release yet, the workflow builds the zip, creates the tag (for example `v6.8`) and publishes the release. Pushing a matching tag by hand also works.
 
 ## License
 

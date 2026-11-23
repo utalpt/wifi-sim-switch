@@ -1,9 +1,12 @@
 name: Release
 
-# Push a tag like v6.8 to build the module zip and publish a GitHub release.
-# module.prop must already have the same version.
+# Bump the version in module.prop and push to main: if there is no release for
+# that version yet, this builds the zip, creates the tag and publishes the release.
+# Pushing a tag like v6.8 by hand also works (it must match module.prop).
 on:
   push:
+    branches: [main]
+    paths: [module.prop]
     tags: ['v*']
   workflow_dispatch:
 
@@ -16,11 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check module.prop matches the tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Read the version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           v=$(grep '^version=' module.prop | cut -d= -f2)
-          [ "$v" = "$GITHUB_REF_NAME" ] || { echo "module.prop version $v != tag $GITHUB_REF_NAME"; exit 1; }
+          echo "VER=$v" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$v" != "$GITHUB_REF_NAME" ]; then
+            echo "module.prop version $v != tag $GITHUB_REF_NAME"; exit 1
+          fi
+          if gh release view "$v" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $v already exists, only building the artifact"
+            echo "PUBLISH=0" >> "$GITHUB_ENV"
+          else
+            echo "PUBLISH=1" >> "$GITHUB_ENV"
+          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -52,9 +65,9 @@ jobs:
           path: ${{ env.ZIP }}
 
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: env.PUBLISH == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          awk -v t="## $GITHUB_REF_NAME" '$0==t{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
-          gh release create "$GITHUB_REF_NAME" "$ZIP" --title "WiFi SIM Switch $GITHUB_REF_NAME" --notes-file notes.md
+          awk -v t="## $VER" '$0==t{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          gh release create "$VER" "$ZIP" --target "$GITHUB_SHA" --title "WiFi SIM Switch $VER" --notes-file notes.md
