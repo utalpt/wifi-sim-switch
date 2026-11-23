@@ -1,2 +1,3 @@
 # Count the module as Shell: the WebUI page is one large HTML file
 *.html linguist-detectable=false
+webroot/** linguist-vendored
