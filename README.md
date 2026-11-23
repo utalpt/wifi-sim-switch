@@ -14,7 +14,7 @@ Built and tested on the Xiaomi 17 Ultra (nezha) running xiaomi.eu HyperOS 3, wit
 - **KernelSU / KernelSU Next / APatch:** everything works, including the WebUI and the card banner.
 - **Magisk:** the module, the status on the card and the Action button (Magisk v28+) work, but this hasn't been tested on Magisk yet. Magisk has no WebUI of its own, so use **WebUI X** or **MMRL** to open the settings. The banner isn't shown.
 
-![WebUI: status, Off WiFi profile and Advanced](docs/screens.png)
+<p align="center"><img src="docs/overview.png" width="540" alt="Features at a glance"></p>
 
 ## Install
 
@@ -69,6 +69,8 @@ Profiles are declarative. Saving new settings applies the current profile again 
 
 The service writes its current state into the module's description, which the KernelSU manager shows on the module card:
 
+<p align="center"><img src="docs/card.png" width="560" alt="Module card in KernelSU Next"></p>
+
 - `✅ On WiFi · MEO on · NOS off · mobile data off`
 - `✅ Off WiFi · MEO on · NOS on · data on NOS`
 - `⏸️ Paused - both SIMs on`
@@ -77,6 +79,8 @@ The service writes its current state into the module's description, which the Ke
 The card refreshes when you reopen the module list.
 
 ## WebUI
+
+![WebUI: status, Off WiFi profile and Advanced](docs/screens.png)
 
 - **Now:** WiFi, which profile is applied, and both SIMs with carrier, network types, whether each one is on or off, and which handles calls, SMS and data.
 - **Enabled:** pausing turns both SIMs back on with their own network types.
